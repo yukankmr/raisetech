@@ -1,0 +1,153 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: "The resources this template creates are as follows: a vpc, 2 public subnets, 2 private subnets, an igw, a public rtb, and private rtb."
+
+Parameters:
+  TagKeyname:
+    Description: Enter the value of tags.
+    Type: String
+    Default: raisetech
+
+Resources:
+  Vpc:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.0.0.0/16
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      InstanceTenancy: "default"
+      Tags:
+        - Key: Project
+          Value: !Sub vpc-${TagKeyname}
+  Igw:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Project
+          Value: !Sub igw-${TagKeyname}
+  AttachGateway:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref Vpc
+      InternetGatewayId: !Ref Igw
+
+  PublicSubnet1a:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: !Select
+        - 0
+        - !GetAZs ""
+      VpcId: !Ref Vpc
+      CidrBlock: 10.0.0.0/20
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Project
+          Value: !Sub subnet-${TagKeyname}
+  PublicSubnet1c:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: !Select
+        - 1
+        - !GetAZs ""
+      VpcId: !Ref Vpc
+      CidrBlock: 10.0.16.0/20
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Project
+          Value: !Sub subnet-${TagKeyname}
+  PrivateSubnet1a:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: !Select
+        - 0
+        - !GetAZs ""
+      VpcId: !Ref Vpc
+      CidrBlock: 10.0.128.0/20
+      Tags:
+        - Key: Project
+          Value: !Sub subnet-${TagKeyname}
+  PrivateSubnet1c:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: !Select
+        - 1
+        - !GetAZs ""
+      VpcId: !Ref Vpc
+      CidrBlock: 10.0.144.0/20
+      Tags:
+        - Key: Project
+          Value: !Sub subnet-${TagKeyname}
+
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    DependsOn: AttachGateway
+    Properties:
+      VpcId: !Ref Vpc
+      Tags:
+        - Key: Project
+          Value: !Sub rtb-${TagKeyname}
+  PublicRoute:
+    Type: AWS::EC2::Route
+    DependsOn: AttachGateway
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref Igw
+  PublicSubnet1aRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet1a
+      RouteTableId: !Ref PublicRouteTable
+  PublicSubnet1cRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet1c
+      RouteTableId: !Ref PublicRouteTable
+  PrivateRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref Vpc
+      Tags:
+        - Key: Project
+          Value: !Sub rtb-${TagKeyname}
+  PrivateSubnet1aRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnet1a
+      RouteTableId: !Ref PrivateRouteTable
+  PrivateSubnet1cRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnet1c
+      RouteTableId: !Ref PrivateRouteTable
+
+Outputs:
+  VpcOutput:
+    Description: VPC Value to export
+    Value: !Ref Vpc
+    Export:
+      Name: vpc-id
+  PublicSubnet1aOutput:
+    Description: Public subnet1a value to export
+    Value: !Ref PublicSubnet1a
+    Export:
+      Name: public-subnet1a-id
+  PublicSubnet1cOutput:
+    Description: Public subnet1c value to export
+    Value: !Ref PublicSubnet1c
+    Export:
+      Name: public-subnet1c-id
+  TagKeynameOutput:
+    Description: Tag value in the parameter section to export
+    Value: !Ref TagKeyname
+    Export:
+      Name: tag-keyname
+  PrivateSubnet1aOutput:
+    Description: Private subnet1a value to export
+    Value: !Ref PrivateSubnet1a
+    Export:
+      Name: private-subnet1a-id
+  PrivateSubnet1cOutput:
+    Description: Private subnet1a value to export
+    Value: !Ref PrivateSubnet1c
+    Export:
+      Name: private-subnet1c-id

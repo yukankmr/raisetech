@@ -1,0 +1,240 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: "The resources this template creates are as follows: an EC2 instance, an keypair, an ALB, security groups, an instance profile, an IAM role, an IAM policy and an S3 bucket."
+
+Parameters:
+  S3BucketName:
+    Description: Enter bucket name.
+    Type: String
+
+Mappings:
+  RegionMap:
+    us-east-1:
+      HVM64: ami-026b57f3c383c2eec
+    us-west-1:
+      HVM64: ami-09208e69ff3feb1db
+    eu-central-1:
+      HVM64: ami-05ff5eaef6149df49
+    ap-southeast-1:
+      HVM64: ami-0f62d9254ca98e1aa
+    ap-northeast-1:
+      HVM64: ami-078296f82eb463377
+
+Resources:
+  # Keypair
+  CFnKeyPair:
+    Type: AWS::EC2::KeyPair
+    Properties:
+      KeyName: cfn-keypair
+      KeyType: rsa
+      Tags:
+        - Key: Project
+          Value: !Sub
+            - cfn-keypair-${value}
+            - value: !ImportValue tag-keyname
+  # Secueiry Groups
+  WebSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: public-sg
+      GroupDescription: "Enable SSH access via port 22 and enable HTTP access via ALB"
+      VpcId: !ImportValue vpc-id
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          SourceSecurityGroupId: !GetAtt ALBSecurityGroup.GroupId
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Project
+          Value: !Sub
+            - sg-${value}
+            - value: !ImportValue tag-keyname
+  ALBSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: "Allow http access"
+      GroupName: alb-sg
+      VpcId: !ImportValue vpc-id
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Project
+          Value: !Sub
+            - sg-${value}
+            - value: !ImportValue tag-keyname
+  # EC2 Instance
+  WebServerInstace:
+    Type: AWS::EC2::Instance
+    Properties:
+      AvailabilityZone: !Select
+        - 0
+        - !GetAZs ""
+      BlockDeviceMappings:
+        - DeviceName: /dev/xvda
+          Ebs:
+            VolumeSize: 8
+            VolumeType: gp2
+            DeleteOnTermination: true
+      IamInstanceProfile: !Ref InstanceProfile
+      ImageId: !FindInMap [RegionMap, !Ref "AWS::Region", HVM64]
+      InstanceType: t2.micro
+      KeyName: !Ref CFnKeyPair
+      NetworkInterfaces:
+        - AssociatePublicIpAddress: true
+          DeleteOnTermination: true
+          DeviceIndex: "0"
+          GroupSet:
+            - !Ref WebSecurityGroup
+          SubnetId: !ImportValue public-subnet1a-id
+      Tags:
+        - Key: Project
+          Value: !Sub
+            - ec2-${value}
+            - value: !ImportValue tag-keyname
+      # UserData: "String"
+  # Instance Profile
+  InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Path: "/"
+      Roles:
+        - !Ref EC2Role
+  # IAM Role
+  EC2Role:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: "ec2.amazonaws.com"
+            Action: "sts:AssumeRole"
+      Description: Role for the EC2 instance.
+      ManagedPolicyArns:
+        - !Ref S3ProgrammaticReadWriteAccess
+      RoleName: !Join
+        - ""
+        - - !Ref AWS::Region
+          - -ec2-role
+  # IAM Managed Policy
+  S3ProgrammaticReadWriteAccess:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      Description: S3 read and write access.
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action:
+              - "s3:GetObject"
+              - "s3:GetObjectVersion"
+              - "s3:ListBucket"
+              - "s3:ListBucketVersions"
+              - "s3:PutObject"
+            Resource:
+              - !GetAtt "S3Bucket.Arn"
+              - !Sub "${S3Bucket.Arn}/*"
+  # S3
+  S3Bucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      AccessControl: Private
+      BucketName: !Sub ${S3BucketName}
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerEnforced
+      Tags:
+        - Key: Project
+          Value: !Sub
+            - s3-bucket-${value}
+            - value: !ImportValue tag-keyname
+      VersioningConfiguration:
+        Status: Enabled
+  S3BucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref S3Bucket
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action:
+              - "s3:GetObject"
+              - "s3:GetObjectVersion"
+            Principal: "*"
+            Resource: !Sub "${S3Bucket.Arn}/*"
+          - Effect: Allow
+            Action:
+              - "s3:GetObject"
+              - "s3:GetObjectVersion"
+              - "s3:PutObject"
+              - "s3:ListBucket"
+              - "s3:ListBucketVersions"
+            Principal:
+              AWS:
+                - !GetAtt "EC2Role.Arn"
+            Resource:
+              - !GetAtt "S3Bucket.Arn"
+              - !Sub "${S3Bucket.Arn}/*"
+  # ALB
+  ApplicationLoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      IpAddressType: ipv4
+      Scheme: internet-facing
+      SecurityGroups:
+        - !GetAtt ALBSecurityGroup.GroupId
+      Subnets:
+        - !ImportValue public-subnet1a-id
+        - !ImportValue public-subnet1c-id
+      Tags:
+        - Key: Project
+          Value: !Sub
+            - alb-${value}
+            - value: !ImportValue tag-keyname
+  ALBListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref ALBTargetGroup
+      LoadBalancerArn: !Ref ApplicationLoadBalancer
+      Port: 80
+      Protocol: HTTP
+  ALBTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      HealthCheckIntervalSeconds: 30
+      HealthCheckTimeoutSeconds: 5
+      HealthyThresholdCount: 3
+      Port: 80
+      Protocol: HTTP
+      Tags:
+        - Key: Project
+          Value: !Sub
+            - target-group-${value}
+            - value: !ImportValue tag-keyname
+      TargetType: instance
+      Targets:
+        - Id: !Ref WebServerInstace
+      UnhealthyThresholdCount: 5
+      VpcId: !ImportValue vpc-id
+
+Outputs:
+  WebSecurityGroupOutput:
+    Value: !GetAtt WebSecurityGroup.GroupId
+    Export:
+      Name: web-sg

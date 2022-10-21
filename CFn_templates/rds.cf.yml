@@ -1,0 +1,115 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: "The resources this template creates are as follows: a DB security group, a DB instace, a DB parameter group, a DB subnet group, an option group."
+
+Parameters:
+  DBInstanceID:
+    Type: String
+    Default: app-prod
+  InstanceClass:
+    Type: String
+    Default: db.t3.micro
+  DBMasterUsername:
+    NoEcho: "true"
+    Description: Username for MySQL database access
+    Type: String
+    MinLength: "1"
+    MaxLength: "16"
+    AllowedPattern: "[a-zA-Z][a-zA-Z0-9]*"
+    ConstraintDescription: must begin with a letter and contain only alphanumeric characters.
+  MasterUserPassSSMParamKey:
+    Type: AWS::SSM::Parameter::Name
+
+Resources:
+  # Security Group
+  RDSSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: "Enable access via port 3306"
+      GroupName: private-sg
+      VpcId: !ImportValue vpc-id
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 3306
+          ToPort: 3306
+          SourceSecurityGroupId: !ImportValue web-sg
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Project
+          Value: !Sub
+            - sg-${value}
+            - value: !ImportValue tag-keyname
+  # RDS
+  MySQLDB:
+    Type: AWS::RDS::DBInstance
+    Properties:
+      AllocatedStorage: 20
+      AllowMajorVersionUpgrade: true
+      AvailabilityZone: !Select
+        - 0
+        - !GetAZs ""
+      BackupRetentionPeriod: 0
+      CopyTagsToSnapshot: true
+      DBInstanceClass: !Sub ${InstanceClass}
+      DBInstanceIdentifier: !Sub ${DBInstanceID}
+      DBParameterGroupName: !Ref DBParameterGroup
+      DBSubnetGroupName: !Ref DBSubnetGroup
+      Engine: mysql
+      EngineVersion: 8.0.28
+      MasterUserPassword: !Sub "{{resolve:ssm-secure:${MasterUserPassSSMParamKey}:1}}"
+      MasterUsername: !Sub ${DBMasterUsername}
+      MultiAZ: false
+      OptionGroupName: !Ref OptionGroup
+      PreferredMaintenanceWindow: sat:20:21-sat:20:51
+      StorageEncrypted: true
+      StorageType: gp2
+      Tags:
+        - Key: Project
+          Value: !Sub
+            - db-${value}
+            - value: !ImportValue tag-keyname
+      VPCSecurityGroups:
+        - !Ref RDSSecurityGroup
+    DeletionPolicy: Delete
+
+  DBParameterGroup:
+    Type: AWS::RDS::DBParameterGroup
+    Properties:
+      Description: "DB parameter group for mysql 8.0"
+      Family: MySQL8.0
+      Parameters:
+        time_zone: Asia/Tokyo
+        character_set_client: utf8mb4
+        character_set_database: utf8mb4
+        character_set_server: utf8mb4
+        character_set_connection: utf8mb4
+        character_set_results: utf8mb4
+
+  DBSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: "DB subnet group"
+      DBSubnetGroupName: cfn-subnet-group
+      SubnetIds:
+        - !ImportValue private-subnet1a-id
+        - !ImportValue private-subnet1c-id
+      Tags:
+        - Key: Project
+          Value: !Sub
+            - subnet-group-${value}
+            - value: !ImportValue tag-keyname
+
+  OptionGroup:
+    Type: AWS::RDS::OptionGroup
+    Properties:
+      EngineName: mysql
+      MajorEngineVersion: "8.0"
+      OptionConfigurations:
+        - OptionName: MARIADB_AUDIT_PLUGIN
+      OptionGroupDescription: "Option group for mysql 8.0"
+      Tags:
+        - Key: Project
+          Value: !Sub
+            - option-group-${value}
+            - value: !ImportValue tag-keyname
