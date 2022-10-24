@@ -24,7 +24,7 @@ Resources:
   CFnKeyPair:
     Type: AWS::EC2::KeyPair
     Properties:
-      KeyName: cfn-keypair
+      KeyName: CFnKeyPair
       KeyType: rsa
       Tags:
         - Key: Project
@@ -74,6 +74,19 @@ Resources:
           Value: !Sub
             - sg-${value}
             - value: !ImportValue tag-keyname
+  # Launch Template
+  MyLaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateName: cfn-launch-template
+      LaunchTemplateData:
+        UserData:
+          Fn::Base64: |
+            #!/bin/bash
+            yum update -y
+            amazon-linux-extras install -y nginx1
+            systemctl start nginx
+            systemctl enable nginx.service
   # EC2 Instance
   WebServerInstace:
     Type: AWS::EC2::Instance
@@ -103,7 +116,9 @@ Resources:
           Value: !Sub
             - ec2-${value}
             - value: !ImportValue tag-keyname
-      # UserData: "String"
+      LaunchTemplate:
+        LaunchTemplateId: !Ref MyLaunchTemplate
+        Version: !GetAtt MyLaunchTemplate.LatestVersionNumber
   # Instance Profile
   InstanceProfile:
     Type: AWS::IAM::InstanceProfile
