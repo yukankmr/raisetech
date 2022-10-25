@@ -8,6 +8,8 @@ Parameters:
   InstanceClass:
     Type: String
     Default: db.t3.micro
+  DBEngineVersion:
+    Type: String
   DBMasterUsername:
     NoEcho: "true"
     Description: Username for MySQL database access
@@ -38,7 +40,7 @@ Resources:
       Tags:
         - Key: Project
           Value: !Sub
-            - sg-${value}
+            - db-sg-${value}
             - value: !ImportValue tag-keyname
   # RDS
   MySQLDB:
@@ -56,7 +58,7 @@ Resources:
       DBParameterGroupName: !Ref DBParameterGroup
       DBSubnetGroupName: !Ref DBSubnetGroup
       Engine: mysql
-      EngineVersion: 8.0.28
+      EngineVersion: !Sub ${DBEngineVersion}
       MasterUserPassword: !Sub "{{resolve:ssm-secure:${MasterUserPassSSMParamKey}:1}}"
       MasterUsername: !Sub ${DBMasterUsername}
       MultiAZ: false

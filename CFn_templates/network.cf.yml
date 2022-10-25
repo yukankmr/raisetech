@@ -41,7 +41,7 @@ Resources:
       MapPublicIpOnLaunch: true
       Tags:
         - Key: Project
-          Value: !Sub subnet-${TagKeyname}
+          Value: !Sub public-subnet1a-${TagKeyname}
   PublicSubnet1c:
     Type: AWS::EC2::Subnet
     Properties:
@@ -53,7 +53,7 @@ Resources:
       MapPublicIpOnLaunch: true
       Tags:
         - Key: Project
-          Value: !Sub subnet-${TagKeyname}
+          Value: !Sub public-subnet1c-${TagKeyname}
   PrivateSubnet1a:
     Type: AWS::EC2::Subnet
     Properties:
@@ -64,7 +64,7 @@ Resources:
       CidrBlock: 10.0.128.0/20
       Tags:
         - Key: Project
-          Value: !Sub subnet-${TagKeyname}
+          Value: !Sub private-subnet1a-${TagKeyname}
   PrivateSubnet1c:
     Type: AWS::EC2::Subnet
     Properties:
@@ -75,7 +75,7 @@ Resources:
       CidrBlock: 10.0.144.0/20
       Tags:
         - Key: Project
-          Value: !Sub subnet-${TagKeyname}
+          Value: !Sub private-subnet1c-${TagKeyname}
 
   PublicRouteTable:
     Type: AWS::EC2::RouteTable
@@ -84,7 +84,7 @@ Resources:
       VpcId: !Ref Vpc
       Tags:
         - Key: Project
-          Value: !Sub rtb-${TagKeyname}
+          Value: !Sub public-rtb-${TagKeyname}
   PublicRoute:
     Type: AWS::EC2::Route
     DependsOn: AttachGateway
@@ -108,7 +108,7 @@ Resources:
       VpcId: !Ref Vpc
       Tags:
         - Key: Project
-          Value: !Sub rtb-${TagKeyname}
+          Value: !Sub private-rtb-${TagKeyname}
   PrivateSubnet1aRouteTableAssociation:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
