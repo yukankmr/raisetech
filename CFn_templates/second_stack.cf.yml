@@ -81,15 +81,81 @@ Resources:
       LaunchTemplateName: cfn-launch-template
       LaunchTemplateData:
         UserData:
-          Fn::Base64: |
-            #!/bin/bash
+          Fn::Base64: !Sub |
+            #!/bin/bash -xe
             yum update -y
-            amazon-linux-extras install -y nginx1
-            systemctl start nginx
-            systemctl enable nginx.service
+            yum install -y aws-cfn-bootstrap
+            /opt/aws/bin/cfn-init -v -s ${AWS::StackId} -r WebServerInstace -c full_install --region ${AWS::Region}
   # EC2 Instance
   WebServerInstace:
     Type: AWS::EC2::Instance
+    Metadata:
+      Comment: Install Ruby
+      AWS::CloudFormation::Init:
+        configSets:
+          full_install:
+            - install_cfn
+            - install_nginx
+            - install_ruby
+        install_cfn:
+          files:
+            /etc/cfn/cfn-hup.conf:
+              content: !Sub |
+                [main]
+                stack=${AWS::StackId}
+                region=${AWS::Region}
+              mode: "000400"
+              owner: root
+              group: root
+            /etc/cfn/hooks.d/cfn-auto-reloader.conf:
+              content: !Sub |
+                [cfn-auto-reloader-hook]
+                triggers=post.update
+                path=Resources.TestServerInstac.Metadata.AWS::CloudFormation::Init
+                action=/opt/aws/bin/cfn-init -v -s ${AWS::StackId} -r TestServerInstace -c full_install --region ${AWS::Region}
+                runas=root
+              mode: "000400"
+              owner: root
+              group: root
+          services:
+            sysvinit:
+              cfn-hup:
+                enabled: "true"
+                ensureRunning: "true"
+                files:
+                  - /etc/cfn/cfn-hup.conf
+                  - /etc/cfn/hooks.d/cfn-auto-reloader.conf
+        install_nginx:
+          commands:
+            01_install_nginx:
+              command: amazon-linux-extras install -y nginx1
+            02_start_nginx:
+              command: systemctl start nginx
+            03_enable_nginx:
+              command: systemctl enable nginx.service
+        install_ruby:
+          packages:
+            yum:
+              git: []
+              make: []
+              python3: []
+              python3-pip: []
+              gcc-c++: []
+              openssl-devel: []
+              readline-devel: []
+              zlib-devel: []
+          files:
+            /home/ec2-user/tmp.sh:
+              content: |
+                #!/bin/bash -x
+                cd /home/ec2-user
+                curl -fsSL https://github.com/rbenv/rbenv-installer/raw/HEAD/bin/rbenv-installer | bash
+                echo 'eval "$(~/.rbenv/bin/rbenv init - bash)"' >> ~/.bash_profile
+                /bin/bash -lc "rbenv install 2.6.3"
+                /bin/bash -lc "rbenv global 2.6.3"
+              mode: "000755"
+              owner: root
+              group: root
     Properties:
       AvailabilityZone: !Select
         - 0
