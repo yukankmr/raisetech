@@ -1,0 +1,57 @@
+version: 2.1
+
+orbs:
+  aws-cli: circleci/aws-cli@3.1.3
+
+jobs:
+  cfn-lint:
+    executor: aws-cli/default
+    steps:
+      - checkout
+      - run: pip install cfn-lint
+      - run:
+          name: run cf-lint
+          command: |
+            cfn-lint -i W3002 -t templates/*.yml
+  install-aws-cli-and-deploy-CFn-templates:
+    executor: aws-cli/default
+    parameters:
+      stack-name:
+        type: string
+      s3-bucket-name:
+        type: string
+      db-engine-version:
+        type: string
+      db-master-username:
+        type: string
+      master-user-pass-ssm-param-key:
+        type: string
+    steps:
+      - checkout
+      - aws-cli/setup:
+          role-arn: $AWS_ROLE_ARN
+      - run:
+          name: deploy CloudFormation templates
+          command: |
+            aws cloudformation deploy \
+            --stack-name << parameters.stack-name >> \
+            --template-file templates/vpc_ec2_alb_rds_s3.cf.yml \
+            --capabilities CAPABILITY_NAMED_IAM \
+            --parameter-overrides S3BucketName=<< parameters.s3-bucket-name >> \
+            DBEngineVersion=<< parameters.db-engine-version >> \
+            DBMasterUsername=<< parameters.db-master-username >> \
+            MasterUserPassSSMParamKey=/rds/master_user_password
+
+workflows:
+  deployment:
+    jobs:
+      - cfn-lint
+      - install-aws-cli-and-deploy-CFn-templates:
+          requires:
+            - cfn-lint
+          context: aws-deploy
+          stack-name: vpc-ec2-alb-rds-s3
+          s3-bucket-name: $S3_BUCKET_NAME
+          db-engine-version: 8.0.28
+          db-master-username: $DB_USER_NAME
+          master-user-pass-ssm-param-key: $RDS_PASS_SSM_PARM_KEY
