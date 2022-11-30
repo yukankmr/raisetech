@@ -12,12 +12,10 @@ jobs:
       - run:
           name: run cf-lint
           command: |
-            cfn-lint -i W3002 -t templates/*.yml
+            cfn-lint -i W3002 -t CFn_templates/*.yml
   install-aws-cli-and-deploy-CFn-templates:
     executor: aws-cli/default
     parameters:
-      stack-name:
-        type: string
       s3-bucket-name:
         type: string
       db-engine-version:
@@ -34,13 +32,22 @@ jobs:
           name: deploy CloudFormation templates
           command: |
             aws cloudformation deploy \
-            --stack-name << parameters.stack-name >> \
-            --template-file templates/vpc_ec2_alb_rds_s3.cf.yml \
-            --capabilities CAPABILITY_NAMED_IAM \
+            --stack-name vpc-stack \
+            --template-file CFn_templates/01vpc.cf.yml
+
+            aws cloudformation deploy \
+            --stack-name ec2-alb-s3-stack \
+            --template-file CFn_templates/02ec2_alb_s3.cf.yml \
             --parameter-overrides S3BucketName=<< parameters.s3-bucket-name >> \
+            --capabilities CAPABILITY_NAMED_IAM
+
+            aws cloudformation deploy \
+            --stack-name rds-stack \
+            --template-file CFn_templates/03rds.cf.yml \
+            --parameter-overrides \
             DBEngineVersion=<< parameters.db-engine-version >> \
             DBMasterUsername=<< parameters.db-master-username >> \
-            MasterUserPassSSMParamKey=/rds/master_user_password
+            MasterUserPassSSMParamKey=<< parameters.master-user-pass-ssm-param-key >>
 
 workflows:
   deployment:
@@ -50,7 +57,6 @@ workflows:
           requires:
             - cfn-lint
           context: aws-deploy
-          stack-name: vpc-ec2-alb-rds-s3
           s3-bucket-name: $S3_BUCKET_NAME
           db-engine-version: 8.0.28
           db-master-username: $DB_USER_NAME
